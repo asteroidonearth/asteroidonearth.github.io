@@ -713,13 +713,6 @@
             0%, 100% { transform: translateY(0); }
             50% { transform: translateY(-5px); }
         }
-
-        /* HARDCORE WARDEN OVERLAY CSS */
-        #esc-overlay {
-            display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; 
-            background: rgba(0,0,0,0.9); z-index: 1000002; flex-direction: column; 
-            align-items: center; justify-content: center; backdrop-filter: blur(20px);
-        }
     </style>
 </head>
 <body>
@@ -881,14 +874,6 @@
                 <button class="nx-btn" style="flex: 1; background: var(--accent-color); color: white; justify-content: center;" id="creator-save-btn">Save</button>
                 <button class="nx-btn" style="flex: 1; justify-content: center;" onclick="closeMod('mod-creator')">Cancel</button>
             </div>
-        </div>
-    </div>
-
-    <!-- HARDCORE WARDEN OVERLAY HTML -->
-    <div id="esc-overlay">
-        <div style="color:var(--accent-color); font-size:1.5rem; margin-bottom:20px; font-weight: 900; letter-spacing: 2px;">HOLD ESC TO EXIT FOCUS</div>
-        <div style="width:300px; height:8px; background:rgba(255,255,255,0.05); border-radius:10px; overflow: hidden;">
-            <div id="esc-progress-bar" style="width:0%; height:100%; background:var(--accent-color); transition: width 0.1s linear;"></div>
         </div>
     </div>
 
@@ -2089,24 +2074,25 @@
 
         function toggleClock() {
     if(state.clockOn) {
-        // TURN OFF focus mode before exiting fullscreen
-        state.isFocusMode = false;
+        // AUTHORIZED EXIT
+        state.isFocusMode = false; // "Unlock" the Warden
         if (document.fullscreenElement) document.exitFullscreen();
         
         clearInterval(clockId); 
         document.getElementById('clock-toggle').innerText = "Start";
     } else {
-        toggleFocusProtocol();
+        // START SESSION
+        state.isFocusMode = true; // "Lock" the Warden
+        document.documentElement.requestFullscreen();
         
         clockId = setInterval(() => {
             if(state.time > 0) { 
                 state.time--; 
                 refreshClockUI(); 
             } else { 
+                // TIMER FINISHED (AUTHORIZED EXIT)
                 clearInterval(clockId); 
-                
-                // EXIT focus mode automatically when time is up
-                state.isFocusMode = false;
+                state.isFocusMode = false; 
                 if (document.fullscreenElement) document.exitFullscreen();
                 
                 triggerToast("Session finished."); 
@@ -2129,84 +2115,26 @@
             refreshClockUI(); document.getElementById('clock-toggle').innerText = "Start";
         }
 
-        // --- FOCUS WARDEN LOGIC (HARDCORE MODE) ---
-        let holdStartTime = 0;
-        let isExitingCleanly = false;
+// --- THE WARDEN (PRISON MODE) ---
 
-        // --- FOCUS WARDEN LOGIC (PERSISTENT MODE) ---
-function toggleFocusProtocol() {
-    const doc = document.documentElement;
-    if (!state.isFocusMode) {
-        if (doc.requestFullscreen) doc.requestFullscreen();
-        state.isFocusMode = true;
-        triggerToast("FOCUS PROTOCOL ACTIVE");
-    }
-}
-
-document.addEventListener('fullscreenchange', () => {
-    // If we are NOT in fullscreen, but Focus Mode is still active...
-    if (!document.fullscreenElement && state.isFocusMode) {
-        // Pop back in immediately
+// 1. THIS handles the physical Esc key press
+document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && state.isFocusMode) {
+        // Immediately try to re-enter
         document.documentElement.requestFullscreen();
         
         state.distractions++;
         document.getElementById('distraction-count').innerText = state.distractions;
-        triggerToast("WARDEN: Focus Maintained. Use Pause to exit.");
+        triggerToast("WARDEN: Escape Prevented.");
     }
 });
-// (The keydown/keyup listeners were removed entirely)
 
-        document.addEventListener('fullscreenchange', () => {
+// 2. THIS handles any other way fullscreen might be exited (browser buttons, etc.)
+document.addEventListener('fullscreenchange', () => {
     if (!document.fullscreenElement && state.isFocusMode) {
-        // If we didn't exit using the 3-second hold, pop back in!
-        if (!isExitingCleanly && state.clockOn) {
-            document.documentElement.requestFullscreen(); // This forces it back
-            
-            state.distractions++;
-            document.getElementById('distraction-count').innerText = state.distractions;
-            triggerToast("WARDEN: Escape Prevented. Use the Hold Protocol.");
-            
-            // Optionally: Comment out resetClock() so the timer keeps running
-            // resetClock(); 
-            return; 
-        }
-        
-        // Only turn off focus mode if it was a "clean" exit
-        state.isFocusMode = false;
-        isExitingCleanly = false;
+        document.documentElement.requestFullscreen();
     }
 });
-
-        document.addEventListener('keydown', (e) => {
-            if (e.key === 'Escape' && state.isFocusMode) {
-                if (!holdStartTime) {
-                    holdStartTime = Date.now();
-                    document.getElementById('esc-overlay').style.display = 'flex';
-                    
-                    state.escTimer = setInterval(() => {
-                        const elapsed = Date.now() - holdStartTime;
-                        const progress = (elapsed / 3000) * 100;
-                        document.getElementById('esc-progress-bar').style.width = progress + '%';
-                        
-                        if (elapsed >= 3000) {
-                            isExitingCleanly = true;
-                            if (document.exitFullscreen) document.exitFullscreen();
-                            clearInterval(state.escTimer);
-                            document.getElementById('esc-overlay').style.display = 'none';
-                        }
-                    }, 100);
-                }
-            }
-        });
-
-        document.addEventListener('keyup', (e) => {
-            if (e.key === 'Escape') {
-                clearInterval(state.escTimer);
-                holdStartTime = 0;
-                document.getElementById('esc-overlay').style.display = 'none';
-                document.getElementById('esc-progress-bar').style.width = '0%';
-            }
-        });
 
         // --- ONBOARDING & GUIDED TOUR ---
         function concludeSetup() {
